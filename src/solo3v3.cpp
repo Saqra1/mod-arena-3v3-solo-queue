@@ -157,98 +157,76 @@ void Solo3v3::CheckStartSolo3v3Arena(Battleground* bg)
     }
 }
 
-bool Solo3v3::CheckSolo3v3Arena(BattlegroundQueue* queue, BattlegroundBracketId bracket_id, bool isRated)
+bool Solo3v3::CheckSolo3v3Arena(BattlegroundQueue* queue, BattlegroundBracketId bracketId)
 {
-    bool soloTeam[BG_TEAMS_COUNT][MAX_TALENT_CAT]; // 2 teams and each team 3 players - set to true when slot is taken
-
-    for (int i = 0; i < BG_TEAMS_COUNT; i++)
-        for (int j = 0; j < MAX_TALENT_CAT; j++)
-            soloTeam[i][j] = false; // default false = slot not taken
-
     queue->m_SelectionPools[TEAM_ALLIANCE].Init();
     queue->m_SelectionPools[TEAM_HORDE].Init();
 
-    uint32 MinPlayersPerTeam = sBattlegroundMgr->isArenaTesting() ? 1 : 3;
+    //uint32 MinPlayersPerTeam = sBattlegroundMgr->isArenaTesting() ? 1 : 3;
+    //bool filterTalents = sConfigMgr->GetOption<bool>("Solo.3v3.FilterTalents", false);
 
-    bool filterTalents = sConfigMgr->GetOption<bool>("Solo.3v3.FilterTalents", false);
+    std::vector<GroupQueueInfo*> dpsPlayers;
+    std::vector<GroupQueueInfo*> healerPlayers;
 
-    uint8 factionGroupTypeAlliance =  isRated ? BG_QUEUE_PREMADE_ALLIANCE : BG_QUEUE_NORMAL_ALLIANCE;
-    uint8 factionGroupTypeHorde = isRated ? BG_QUEUE_PREMADE_HORDE : BG_QUEUE_NORMAL_HORDE;
-
-    for (int teamId = 0; teamId < 2; teamId++) // BG_QUEUE_PREMADE_ALLIANCE and BG_QUEUE_PREMADE_HORDE
+    for (auto const& group : queue->m_QueuedGroups[bracketId][TEAM_ALLIANCE])
     {
-        int index = teamId;
+        if (group->IsInvitedToBGInstanceGUID)
+            continue;
 
-        if (!isRated)
-            index += PVP_TEAMS_COUNT;
+        if (group->Players.size() != 1)
+            continue;
 
-        for (BattlegroundQueue::GroupsQueueType::iterator itr = queue->m_QueuedGroups[bracket_id][index].begin(); itr != queue->m_QueuedGroups[bracket_id][index].end(); ++itr)
+        ObjectGuid const& playerGuid = *group->Players.begin();
+        Player* player = ObjectAccessor::FindPlayer(playerGuid);
+        if (!player)
+            continue;
+
+        Solo3v3TalentCat talentSlot = GetTalentCatForSolo3v3(player);
+
+        switch (talentSlot)
         {
-            if ((*itr)->IsInvitedToBGInstanceGUID) // Skip when invited
+            case MELEE:
+            case RANGE:
+                if (dpsPlayers.size() < 4)
+                    dpsPlayers.push_back(group);
                 continue;
-
-            for (auto const& playerGuid : (*itr)->Players)
-            {
-                Player* plr = ObjectAccessor::FindPlayer(playerGuid);
-                if (!plr)
-                    continue;
-
-                if (!filterTalents && queue->m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount() + queue->m_SelectionPools[TEAM_HORDE].GetPlayerCount() == MinPlayersPerTeam * 2)
-                    return true;
-
-                if (!plr)
-                    return false;
-
-                Solo3v3TalentCat playerSlotIndex;
-                if (filterTalents)
-                    playerSlotIndex = GetTalentCatForSolo3v3(plr);
-                else
-                    playerSlotIndex = GetFirstAvailableSlot(soloTeam);
-
-                // is slot free in alliance team?
-                if ((filterTalents && soloTeam[TEAM_ALLIANCE][playerSlotIndex] == false) || (!filterTalents && queue->m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount() != MinPlayersPerTeam))
-                {
-                    if (queue->m_SelectionPools[TEAM_ALLIANCE].AddGroup((*itr), MinPlayersPerTeam)) // added successfully?
-                    {
-                        soloTeam[TEAM_ALLIANCE][playerSlotIndex] = true; // okay take this slot
-
-                        if ((*itr)->teamId != TEAM_ALLIANCE) // move to other team
-                        {
-                            (*itr)->teamId = TEAM_ALLIANCE;
-                            (*itr)->GroupType = factionGroupTypeAlliance;
-                            queue->m_QueuedGroups[bracket_id][factionGroupTypeAlliance].push_front((*itr));
-                            itr = queue->m_QueuedGroups[bracket_id][factionGroupTypeHorde].erase(itr);
-                            return CheckSolo3v3Arena(queue, bracket_id, isRated);
-                        }
-                    }
-                }
-                else if ((filterTalents && soloTeam[TEAM_HORDE][playerSlotIndex] == false) || !filterTalents) // nope? and in horde team?
-                {
-                    if (queue->m_SelectionPools[TEAM_HORDE].AddGroup((*itr), MinPlayersPerTeam))
-                    {
-                        soloTeam[TEAM_HORDE][playerSlotIndex] = true;
-
-                        if ((*itr)->teamId != TEAM_HORDE) // move to other team
-                        {
-                            (*itr)->teamId = TEAM_HORDE;
-                            (*itr)->GroupType = factionGroupTypeHorde;
-                            queue->m_QueuedGroups[bracket_id][factionGroupTypeHorde].push_front((*itr));
-                            itr = queue->m_QueuedGroups[bracket_id][factionGroupTypeAlliance].erase(itr);
-                            return CheckSolo3v3Arena(queue, bracket_id, isRated);
-                        }
-                    }
-                }
-            }
+            case HEALER:
+                if (healerPlayers.size() < 2)
+                    healerPlayers.push_back(group);
+                continue;
+            default:
+                continue;
         }
     }
 
-    uint32 countAll = 0;
-    for (int i = 0; i < BG_TEAMS_COUNT; i++)
-        for (int j = 0; j < MAX_TALENT_CAT; j++)
-            if (soloTeam[i][j])
-                countAll++;
+    // TODO: Add them randomly to each side
+    if (dpsPlayers.size() == 4 && healerPlayers.size() == 2)
+    {
+        queue->m_SelectionPools[TEAM_ALLIANCE].AddGroup(dpsPlayers[0], 3);
+        queue->m_SelectionPools[TEAM_ALLIANCE].AddGroup(dpsPlayers[1], 3);
+        queue->m_SelectionPools[TEAM_ALLIANCE].AddGroup(healerPlayers[0], 3);
 
-    return countAll == MinPlayersPerTeam * 2 || (!filterTalents && queue->m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount() + queue->m_SelectionPools[TEAM_HORDE].GetPlayerCount() == MinPlayersPerTeam * 2);
+        queue->m_SelectionPools[TEAM_HORDE].AddGroup(SwitchTeam(dpsPlayers[2]), 3);
+        queue->m_SelectionPools[TEAM_HORDE].AddGroup(SwitchTeam(dpsPlayers[3]), 3);
+        queue->m_SelectionPools[TEAM_HORDE].AddGroup(SwitchTeam(healerPlayers[1]), 3);
+
+        int allianceCount = queue->m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount();
+        int hordeCount = queue->m_SelectionPools[TEAM_HORDE].GetPlayerCount();
+
+        if (allianceCount + hordeCount == 6)
+            return true;
+    }
+
+    return false;
+}
+
+GroupQueueInfo* Solo3v3::SwitchTeam(GroupQueueInfo* group)
+{
+    group->teamId = TEAM_HORDE;
+    // FIX: It's BG_QUEUE_NORMAL_HORDE for unrated
+    group->GroupType = BG_QUEUE_PREMADE_HORDE;
+
+    return group;
 }
 
 void Solo3v3::CreateTempArenaTeamForQueue(BattlegroundQueue* queue, ArenaTeam* arenaTeams[])
@@ -268,7 +246,7 @@ void Solo3v3::CreateTempArenaTeamForQueue(BattlegroundQueue* queue, ArenaTeam* a
             for (auto const& itr2 : itr->Players)
             {
                 auto _PlayerGuid = itr2;
-                if (Player * _player = ObjectAccessor::FindPlayer(_PlayerGuid))
+                if (Player* _player = ObjectAccessor::FindPlayer(_PlayerGuid))
                 {
                     playersList.push_back(_player);
                     atPlrItr++;
@@ -378,15 +356,15 @@ Solo3v3TalentCat Solo3v3::GetTalentCatForSolo3v3(Player* player)
     return talCat;
 }
 
-Solo3v3TalentCat Solo3v3::GetFirstAvailableSlot(bool soloTeam[][MAX_TALENT_CAT]) {
-    if (!soloTeam[0][MELEE] || !soloTeam[1][MELEE])
-        return MELEE;
-
-    if (!soloTeam[0][RANGE] || !soloTeam[1][RANGE])
-        return RANGE;
-
-    if (!soloTeam[0][HEALER] || !soloTeam[1][HEALER])
-        return HEALER;
-
-    return MELEE;
-}
+//Solo3v3TalentCat Solo3v3::GetFirstAvailableSlot(bool soloTeam[][MAX_TALENT_CAT]) {
+//    if (!soloTeam[0][MELEE] || !soloTeam[1][MELEE])
+//        return MELEE;
+//
+//    if (!soloTeam[0][RANGE] || !soloTeam[1][RANGE])
+//        return RANGE;
+//
+//    if (!soloTeam[0][HEALER] || !soloTeam[1][HEALER])
+//        return HEALER;
+//
+//    return MELEE;
+//}

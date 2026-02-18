@@ -345,6 +345,9 @@ bool NpcSolo3v3::JoinQueueArena(Player* player, Creature* /*creature*/, bool isR
     bg->SetRated(isRated);
     bg->SetMinPlayersPerTeam(3);
 
+    // Get them all in a single queue
+    player->setTeamId(TEAM_ALLIANCE);
+
     GroupQueueInfo* ginfo = bgQueue.AddGroup(player, nullptr, bgTypeId, bracketEntry, arenatype, isRated, false, arenaRating, matchmakerRating, ateamId, 0);
     uint32 avgTime = bgQueue.GetAverageQueueWaitTime(ginfo);
     uint32 queueSlot = player->AddBattlegroundQueueId(bgQueueTypeId);
@@ -392,8 +395,7 @@ bool NpcSolo3v3::CreateArenateam(Player* player, Creature* /*creature*/)
         }
         else
             break;
-    }
-    while (i < 100); // should never happen
+    } while (i < 100); // should never happen
 
     // Create arena team
     ArenaTeam* arenaTeam = new ArenaTeam();
@@ -497,7 +499,7 @@ void Solo3v3BG::OnQueueUpdate(BattlegroundQueue* queue, uint32 /*diff*/, Battleg
     if (!bracketEntry)
         return;
 
-    if (sSolo->CheckSolo3v3Arena(queue, bracket_id, isRated))
+    if (sSolo->CheckSolo3v3Arena(queue, bracket_id))
     {
         Battleground* arena = sBattlegroundMgr->CreateNewBattleground(bgTypeId, bracketEntry, arenaType, isRated);
         if (!arena)
@@ -579,8 +581,9 @@ void Solo3v3BG::OnBattlegroundEndReward(Battleground* bg, Player* player, TeamId
 
             atStats.SeasonWins += 1;
             atStats.WeekWins += 1;
-        } else {
-            ArenaTeam* loserArenaTeam  = sArenaTeamMgr->GetArenaTeamById(bg->GetArenaTeamIdForTeam(winnerTeamId == TEAM_NEUTRAL ? TEAM_ALLIANCE : bg->GetOtherTeamId(winnerTeamId)));
+        }
+        else {
+            ArenaTeam* loserArenaTeam = sArenaTeamMgr->GetArenaTeamById(bg->GetArenaTeamIdForTeam(winnerTeamId == TEAM_NEUTRAL ? TEAM_ALLIANCE : bg->GetOtherTeamId(winnerTeamId)));
             oldTeamRating = winnerTeamId != TEAM_HORDE ? oldTeamRatingHorde : oldTeamRatingAlliance;
             ratingModifier = int32(loserArenaTeam->GetRating()) - oldTeamRating;
         }
@@ -615,7 +618,8 @@ void Solo3v3BG::OnBattlegroundEndReward(Battleground* bg, Player* player, TeamId
                     // itr->MatchMakerRating = bg->GetArenaMatchmakerRating(winnerTeamId);
                     itr->MatchMakerRating += ratingModifier;
                     itr->MaxMMR = std::max(itr->MaxMMR, itr->MatchMakerRating);
-                } else {
+                }
+                else {
                     // itr->MatchMakerRating = bg->GetArenaMatchmakerRating(bg->GetOtherTeamId(winnerTeamId));
 
                     if (int32(itr->MatchMakerRating) + ratingModifier < 0)

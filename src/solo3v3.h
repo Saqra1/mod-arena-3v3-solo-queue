@@ -120,7 +120,7 @@ public:
     uint32 GetAverageMMR(ArenaTeam* team);
     void CheckStartSolo3v3Arena(Battleground* bg);
     void CleanUp3v3SoloQ(Battleground* bg);
-    bool CheckSolo3v3Arena(BattlegroundQueue* queue, BattlegroundBracketId bracket_id, bool isRated);
+    bool CheckSolo3v3Arena(BattlegroundQueue* queue, BattlegroundBracketId bracketId);
     void CreateTempArenaTeamForQueue(BattlegroundQueue* queue, ArenaTeam* arenaTeams[]);
     void CountAsLoss(Player* player, bool isInProgress);
 
@@ -129,7 +129,10 @@ public:
 
     // Returns MELEE, RANGE or HEALER (depends on talent builds)
     Solo3v3TalentCat GetTalentCatForSolo3v3(Player* player);
-    Solo3v3TalentCat GetFirstAvailableSlot(bool soloTeam[][MAX_TALENT_CAT]);
+    //Solo3v3TalentCat GetFirstAvailableSlot(bool soloTeam[][MAX_TALENT_CAT]);
+
+private:
+    GroupQueueInfo* SwitchTeam(GroupQueueInfo* group);
 };
 
 #define sSolo Solo3v3::instance()
