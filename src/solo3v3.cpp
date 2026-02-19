@@ -206,9 +206,9 @@ bool Solo3v3::CheckSolo3v3Arena(BattlegroundQueue* queue, BattlegroundBracketId 
         queue->m_SelectionPools[TEAM_ALLIANCE].AddGroup(dpsPlayers[1], 3);
         queue->m_SelectionPools[TEAM_ALLIANCE].AddGroup(healerPlayers[0], 3);
 
-        queue->m_SelectionPools[TEAM_HORDE].AddGroup(SwitchTeam(dpsPlayers[2]), 3);
-        queue->m_SelectionPools[TEAM_HORDE].AddGroup(SwitchTeam(dpsPlayers[3]), 3);
-        queue->m_SelectionPools[TEAM_HORDE].AddGroup(SwitchTeam(healerPlayers[1]), 3);
+        queue->m_SelectionPools[TEAM_HORDE].AddGroup(SetHordeQueue(queue, bracketId, dpsPlayers[2]), 3);
+        queue->m_SelectionPools[TEAM_HORDE].AddGroup(SetHordeQueue(queue, bracketId, dpsPlayers[3]), 3);
+        queue->m_SelectionPools[TEAM_HORDE].AddGroup(SetHordeQueue(queue, bracketId, healerPlayers[1]), 3);
 
         int allianceCount = queue->m_SelectionPools[TEAM_ALLIANCE].GetPlayerCount();
         int hordeCount = queue->m_SelectionPools[TEAM_HORDE].GetPlayerCount();
@@ -220,11 +220,19 @@ bool Solo3v3::CheckSolo3v3Arena(BattlegroundQueue* queue, BattlegroundBracketId 
     return false;
 }
 
-GroupQueueInfo* Solo3v3::SwitchTeam(GroupQueueInfo* group)
+GroupQueueInfo* Solo3v3::SetHordeQueue(BattlegroundQueue* queue, BattlegroundBracketId bracketId, GroupQueueInfo* group)
 {
     group->teamId = TEAM_HORDE;
     // FIX: It's BG_QUEUE_NORMAL_HORDE for unrated
     group->GroupType = BG_QUEUE_PREMADE_HORDE;
+
+    // Not sure if necessary
+    auto& allianceQueue = queue->m_QueuedGroups[bracketId][BG_QUEUE_PREMADE_ALLIANCE];
+    auto& hordeQueue = queue->m_QueuedGroups[bracketId][BG_QUEUE_PREMADE_HORDE];
+
+    auto it = std::find(allianceQueue.begin(), allianceQueue.end(), group);
+    if (it != allianceQueue.end())
+        hordeQueue.splice(hordeQueue.end(), allianceQueue, it);
 
     return group;
 }
